@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "scala",
+            "request": "attach",
+            "name": "Attach to example.Main",
+            "buildTarget": "simple-scala-main",
+            "hostName": "localhost",
+            "port": 5555
+        },
+        {
+            "type": "scala",
+            "name": "Debug example.Main",
+            "request": "launch",
+            "mainClass": "example.Main",
+            "buildTarget": "simple-scala-main",
+            "args": []
+        }
+    ]
+}
