@@ -106,11 +106,20 @@ object Main extends App {
     }
   }
 
-  val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
-  val foo = query1.as[Int].head.map { x => 1 }
 
-  val a = sql"select trunc(extract(epoch from now()))".as[Int].head.map { i => logger.info(s"here with : ${i}"); i }
-  val dbFuture = db.run(a.transactionally)
+  val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
+  val bar = query1.as[Int]
+  val barFirst = bar.head
+
+
+  val foo = query1.as[Int].head.map { x => x }
+
+  val delay = sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing".as[Int].head.map { i => logger.info(s"here with : ${i}"); i }
+
+  val doublet = DBIO.sequence(Vector(barFirst, delay, delay, barFirst))
+
+  val dbFuture = db.run(doublet.transactionally)
   Await.result(dbFuture, 60 seconds)
+  logger.info(s"Got: ${dbFuture.value}")
 
 }
