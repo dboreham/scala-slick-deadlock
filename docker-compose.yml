@@ -11,7 +11,7 @@ services:
     # TODO(dboreham): allow multiple instances with differnet data dirs
     user: ${HOST_UID_GID:-1000:1000}
     volumes:
-      - ../volumes/db/data:/var/lib/postgresql/data
+      - ./volumes/db/data:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: db
       POSTGRES_USER: db

@@ -5,8 +5,37 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
+import com.typesafe.scalalogging.Logger
+import slick.jdbc.SQLActionBuilder
+
+object keepForLater {
+
+  def keepForLater(): Unit = {
+
+
+    def f0(x: String): Future[Unit] = {
+      System.err.print("f0:");
+      f1(x)
+    }
+
+    def f1(x: String): Future[Unit] =
+      Future {
+        throw new RuntimeException("Blam!");
+      }
+    val f = f0("222")
+    try {
+      val r = Await.result(f, 10 seconds)
+    } catch {
+      // will print with f0 when agent is enabled
+      case ex: Throwable => ex.printStackTrace
+    }
+
+  }
+}
 
 object Main extends App {
+
+  val logger = Logger("example")
 
   val db = Database.forConfig("databaseUrl")
   try {
@@ -47,13 +76,16 @@ object Main extends App {
           }
       }
 
-      val allSuppliersAction: DBIO[Seq[(Int, String, String, String, String, String)]] =
+      val allSuppliersAction
+          : DBIO[Seq[(Int, String, String, String, String, String)]] =
         suppliers.result
 
-      val combinedAction: DBIO[Seq[(Int, String, String, String, String, String)]] =
+      val combinedAction
+          : DBIO[Seq[(Int, String, String, String, String, String)]] =
         insertAndPrintAction andThen allSuppliersAction
 
-      val combinedFuture: Future[Seq[(Int, String, String, String, String, String)]] =
+      val combinedFuture
+          : Future[Seq[(Int, String, String, String, String, String)]] =
         db.run(combinedAction)
 
       combinedFuture.map { allSuppliers =>
@@ -62,24 +94,23 @@ object Main extends App {
 
     }
     Await.result(f, Duration.Inf)
-  } finally db.close
-
-  val f = f0("222")
-  try {
-    val r = Await.result(f, 10 seconds)
   } catch {
-    // will print with f0 when agent is enabled
-    case ex: Throwable => ex.printStackTrace
-  }
-
-  def f0(x: String): Future[Unit] = {
-    System.err.print("f0:");
-    f1(x)
-  }
-
-  def f1(x: String): Future[Unit] =
-    Future {
-      throw new RuntimeException("Blam!");
+    case e: org.postgresql.util.PSQLException => {
+      e.getMessage() match {
+        case s
+            if s.startsWith("ERROR: relation \"SUPPLIERS\" already exists") =>
+          logger.info(s"good exception: ${s}")
+        case other =>
+          logger.info(s"bad exception: ${other}"); throw new Exception(e)
+      }
     }
+  }
+
+  val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
+  val foo = query1.as[Int].head.map { x => 1 }
+
+  val a = sql"select trunc(extract(epoch from now()))".as[Int].head.map { i => logger.info(s"here with : ${i}"); i }
+  val dbFuture = db.run(a.transactionally)
+  Await.result(dbFuture, 60 seconds)
 
 }
