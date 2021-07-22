@@ -74,7 +74,10 @@ object Main extends App {
   val n = 4 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
             //                        if n >= database.numThreads then the nested queries will starve the pool
             // If .transactionally is removed from query execution calls below, starvation is not seen until n 
-            // is much larger (19 in the case of the 10-core test machine)
+            // is much larger (19 in the case of the 10-core test machine). This failure mode is also slightl
+            // different in that the database thread pool does not seem to itself starve -- the ping 
+            // queries keep on being sent. There is however no results receiving activity suggesting that
+            // something starved that is needed to receive results.
 
   // Execute database transactions that take some time (1 second), log their results
   def loggingWorkQuery(id: Int) = workQuery(id).map { result => logger.info(s"Work query ${result._1} returned: ${result._2}")}
