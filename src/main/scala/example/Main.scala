@@ -64,9 +64,11 @@ object Main extends App {
   runConstantDBPings()
 
   // Query that takes 1 second to execute and returns the current timestamp (as of the beginning of the transaction)
-  val workQuery =
-    sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing"
-      .as[Int]
+  // Note: strange passing of id parameter is because slick provides no way other than string interpolation to 
+  // make a plain sql query.
+  def workQuery(id: Int) =
+    sql"select #$id, trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing"
+      .as[(Int,Int)]
       .head
 
   val n = 4 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
@@ -75,11 +77,11 @@ object Main extends App {
             // is much larger (19 in the case of the 10-core test machine)
 
   // Execute database transactions that take some time (1 second), log their results
-  val loggingWorkQuery = workQuery.map { result => logger.info(s"Work query returned: ${result}")}
+  def loggingWorkQuery(id: Int) = workQuery(id).map { result => logger.info(s"Work query${result._1} returned: ${result._2}")}
   val workTasks = 1 to n map { i =>
     {
       logger.info(s"Executing work query ${i}")
-      db.run(loggingWorkQuery.transactionally)
+      db.run(loggingWorkQuery(i).transactionally)
     }
   }
   // Wait for those to run
@@ -88,17 +90,17 @@ object Main extends App {
 
   // Execute database transactions that take some time (1 second), log their results
   // But also execute a second database transaction inside the result function
-  val nestedWorkQuery =  workQuery.map { result => logger.info(s"Nested work query returned: ${result}")}
-  val evilWorkQuery = workQuery.map { result => {
+  def nestedWorkQuery(id: Int) =  workQuery(id).map { result => logger.info(s"Nested work query returned: ${result}")}
+  def evilWorkQuery(id: Int) = workQuery(id).map { result => {
     logger.info(s"Work query returned: ${result}, executing nested work query")
-    val nestedFuture = db.run(nestedWorkQuery)
+    val nestedFuture = db.run(nestedWorkQuery(id))
     // Wait for its result (needed to starve the connection pool)
     Await.result(nestedFuture, longTime)
   }}
   val evilWorkTasks = 1 to n map { i =>
     {
       logger.info(s"Executing evil work query ${i}")
-      db.run(evilWorkQuery)
+      db.run(evilWorkQuery(i))
     }
   }
   // Wait for those to run
