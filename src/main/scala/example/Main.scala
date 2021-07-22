@@ -12,7 +12,6 @@ object keepForLater {
 
   def keepForLater(): Unit = {
 
-
     def f0(x: String): Future[Unit] = {
       System.err.print("f0:");
       f1(x)
@@ -106,23 +105,35 @@ object Main extends App {
     }
   }
 
-  def callbackFn(i : Int) : Unit = {
-    logger.info(s"here with : ${i}")
-    ()
-  }
-
   val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
   val bar = query1.as[Int]
   val barFirst = bar.head
-
-
   val foo = query1.as[Int].head.map { x => x }
 
-  val delay = sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing".as[Int].head.map { i => callbackFn(i); i }
+    val evilDelay =
+    sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing"
+      .as[Int]
+      .head
+      .map { i => logger.info(s"evil here with : ${i}"); i }
+
+  def callbackFn(i: Int): Unit = {
+    logger.info(s"here with : ${i}")
+    // Bwahahaha... let's start a new DB transaction here
+    val evilFuture = db.run(evilDelay.transactionally)
+    Await.result(evilFuture, 60 seconds)
+    logger.info(s"back here with : ${evilFuture.value}")
+    ()
+  }
+
+  val delay =
+    sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing"
+      .as[Int]
+      .head
+      .map { i => callbackFn(i); i }
 
   val doublet = DBIO.sequence(Vector(barFirst, delay, delay, barFirst))
-
-  val tasks = 1 to 50 map { i => {
+  val tasks = 1 to 19 map { i =>
+    {
       db.run(doublet.transactionally)
     }
   }
