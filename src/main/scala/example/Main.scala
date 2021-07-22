@@ -106,6 +106,10 @@ object Main extends App {
     }
   }
 
+  def callbackFn(i : Int) : Unit = {
+    logger.info(s"here with : ${i}")
+    ()
+  }
 
   val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
   val bar = query1.as[Int]
@@ -114,12 +118,19 @@ object Main extends App {
 
   val foo = query1.as[Int].head.map { x => x }
 
-  val delay = sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing".as[Int].head.map { i => logger.info(s"here with : ${i}"); i }
+  val delay = sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing".as[Int].head.map { i => callbackFn(i); i }
 
   val doublet = DBIO.sequence(Vector(barFirst, delay, delay, barFirst))
 
-  val dbFuture = db.run(doublet.transactionally)
-  Await.result(dbFuture, 60 seconds)
-  logger.info(s"Got: ${dbFuture.value}")
+  val tasks = 1 to 50 map { i => {
+      db.run(doublet.transactionally)
+    }
+  }
+
+  val megaFuture = Future.sequence(tasks)
+
+  // val dbFuture = db.run(doublet.transactionally)
+  Await.result(megaFuture, 60 seconds)
+  logger.info(s"Got: ${megaFuture.value}")
 
 }
