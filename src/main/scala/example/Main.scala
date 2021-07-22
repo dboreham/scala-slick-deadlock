@@ -69,7 +69,11 @@ object Main extends App {
       .as[Int]
       .head
 
-  val n = 20
+  val n = 4 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
+            //                        if n >= database.numThreads then the nested queries will starve the pool
+            // If .transactionally is removed from query execution calls below, starvation is not seen until n 
+            // is much larger (19 in the case of the 10-core test machine)
+
   // Execute database transactions that take some time (1 second), log their results
   val loggingWorkQuery = workQuery.map { result => logger.info(s"Work query returned: ${result}")}
   val workTasks = 1 to n map { i =>
@@ -80,23 +84,28 @@ object Main extends App {
   }
   // Wait for those to run
   Await.result(Future.sequence(workTasks), longTime)
+  logger.info("Non-nested queries completed")
 
   // Execute database transactions that take some time (1 second), log their results
   // But also execute a second database transaction inside the result function
   val nestedWorkQuery =  workQuery.map { result => logger.info(s"Nested work query returned: ${result}")}
   val evilWorkQuery = workQuery.map { result => {
     logger.info(s"Work query returned: ${result}, executing nested work query")
-    val nestedFuture = db.run(nestedWorkQuery.transactionally)
-    // Wait for its result
+    val nestedFuture = db.run(nestedWorkQuery)
+    // Wait for its result (needed to starve the connection pool)
     Await.result(nestedFuture, longTime)
   }}
   val evilWorkTasks = 1 to n map { i =>
     {
       logger.info(s"Executing evil work query ${i}")
-      db.run(evilWorkQuery.transactionally)
+      db.run(evilWorkQuery)
     }
   }
   // Wait for those to run
   Await.result(Future.sequence(evilWorkTasks), longTime)
+  // When the starvation syndrome occurs, we never get to here
+  logger.info("Nested queries completed")
+  // Sleep for a while longer to allow us to see if the concurrent pings are succeeding
+  Thread.sleep(100000)
 
 }
