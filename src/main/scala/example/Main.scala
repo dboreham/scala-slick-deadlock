@@ -43,16 +43,19 @@ object Main extends App {
   }
 
   def runConstantDBPings() = {
-    val pingQuery = sql"select 1".as[Option[String]].map { x => logger.info("Received ping") }
+    val pingQuery =
+      sql"select 1".as[Option[String]].map { x => logger.info("Received ping") }
     val pingFuture = Future {
-      while(true) {
+      while (true) {
         logger.info("Sending ping")
         db.run(pingQuery)
         Thread.sleep(1000)
       }
     }
   }
-  
+
+  val longTime = 300 seconds
+
   // Main begins here
   setupDB()
 
@@ -60,43 +63,40 @@ object Main extends App {
   // This shows us whether slick is alive and working
   runConstantDBPings()
 
-  val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
-  val bar = query1.as[Int]
-  val barFirst = bar.head
-  val foo = query1.as[Int].head.map { x => x }
-
-    val evilDelay =
+  // Query that takes 1 second to execute and returns the current timestamp (as of the beginning of the transaction)
+  val workQuery =
     sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing"
       .as[Int]
       .head
-      .map { i => logger.info(s"evil here with : ${i}"); i }
 
-  def callbackFn(i: Int): Unit = {
-    logger.info(s"here with : ${i}")
-    // Bwahahaha... let's start a new DB transaction here
-    val evilFuture = db.run(evilDelay.transactionally)
-    Await.result(evilFuture, 60 seconds)
-    logger.info(s"back here with : ${evilFuture.value}")
-    ()
-  }
-
-  val delay =
-    sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing"
-      .as[Int]
-      .head
-      .map { i => callbackFn(i); i }
-
-  val doublet = DBIO.sequence(Vector(barFirst, delay, delay, barFirst))
-  val tasks = 1 to 2 map { i =>
+  val n = 20
+  // Execute database transactions that take some time (1 second), log their results
+  val loggingWorkQuery = workQuery.map { result => logger.info(s"Work query returned: ${result}")}
+  val workTasks = 1 to n map { i =>
     {
-      db.run(doublet.transactionally)
+      logger.info(s"Executing work query ${i}")
+      db.run(loggingWorkQuery.transactionally)
     }
   }
+  // Wait for those to run
+  Await.result(Future.sequence(workTasks), longTime)
 
-  val megaFuture = Future.sequence(tasks)
-
-  // val dbFuture = db.run(doublet.transactionally)
-  Await.result(megaFuture, 60 seconds)
-  logger.info(s"Got: ${megaFuture.value}")
+  // Execute database transactions that take some time (1 second), log their results
+  // But also execute a second database transaction inside the result function
+  val nestedWorkQuery =  workQuery.map { result => logger.info(s"Nested work query returned: ${result}")}
+  val evilWorkQuery = workQuery.map { result => {
+    logger.info(s"Work query returned: ${result}, executing nested work query")
+    val nestedFuture = db.run(nestedWorkQuery.transactionally)
+    // Wait for its result
+    Await.result(nestedFuture, longTime)
+  }}
+  val evilWorkTasks = 1 to n map { i =>
+    {
+      logger.info(s"Executing evil work query ${i}")
+      db.run(evilWorkQuery.transactionally)
+    }
+  }
+  // Wait for those to run
+  Await.result(Future.sequence(evilWorkTasks), longTime)
 
 }
