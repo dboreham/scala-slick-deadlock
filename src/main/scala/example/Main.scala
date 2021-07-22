@@ -71,13 +71,13 @@ object Main extends App {
       .as[(Int,Int)]
       .head
 
-  val n = 4 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
+  val n = 3 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
             //                        if n >= database.numThreads then the nested queries will starve the pool
             // If .transactionally is removed from query execution calls below, starvation is not seen until n 
             // is much larger (19 in the case of the 10-core test machine)
 
   // Execute database transactions that take some time (1 second), log their results
-  def loggingWorkQuery(id: Int) = workQuery(id).map { result => logger.info(s"Work query${result._1} returned: ${result._2}")}
+  def loggingWorkQuery(id: Int) = workQuery(id).map { result => logger.info(s"Work query ${result._1} returned: ${result._2}")}
   val workTasks = 1 to n map { i =>
     {
       logger.info(s"Executing work query ${i}")
@@ -90,17 +90,18 @@ object Main extends App {
 
   // Execute database transactions that take some time (1 second), log their results
   // But also execute a second database transaction inside the result function
-  def nestedWorkQuery(id: Int) =  workQuery(id).map { result => logger.info(s"Nested work query returned: ${result}")}
+  def nestedWorkQuery(id: Int) =  workQuery(id).map { result => logger.info(s"Nested work query ${result._1} returned: ${result._2}")}
   def evilWorkQuery(id: Int) = workQuery(id).map { result => {
-    logger.info(s"Work query returned: ${result}, executing nested work query")
-    val nestedFuture = db.run(nestedWorkQuery(id))
+    val nestedQueryId = id * 2
+    logger.info(s"Evil work query ${result._1} returned:  ${result._2}, executing nested work query ${nestedQueryId}")
+    val nestedFuture = db.run(nestedWorkQuery(nestedQueryId))
     // Wait for its result (needed to starve the connection pool)
     Await.result(nestedFuture, longTime)
   }}
   val evilWorkTasks = 1 to n map { i =>
     {
       logger.info(s"Executing evil work query ${i}")
-      db.run(evilWorkQuery(i))
+      db.run(evilWorkQuery(i).transactionally)
     }
   }
   // Wait for those to run
