@@ -71,7 +71,7 @@ object Main extends App {
       .as[(Int,Int)]
       .head
 
-  val n = 4 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
+  val n = 19 // specify concurrency -- if n < database.numThreads then both plain and nested queries will "work"
             //                        if n >= database.numThreads then the nested queries will starve the pool
             // If .transactionally is removed from query execution calls below, starvation is not seen until n 
             // is much larger (19 in the case of the 10-core test machine)
@@ -92,7 +92,7 @@ object Main extends App {
   // But also execute a second database transaction inside the result function
   def nestedWorkQuery(id: Int) =  workQuery(id).map { result => logger.info(s"Nested work query ${result._1} returned: ${result._2}")}
   def evilWorkQuery(id: Int) = workQuery(id).map { result => {
-    val nestedQueryId = id * 2
+    val nestedQueryId = id + n
     logger.info(s"Evil work query ${result._1} returned:  ${result._2}, executing nested work query ${nestedQueryId}")
     val nestedFuture = db.run(nestedWorkQuery(nestedQueryId))
     // Wait for its result (needed to starve the connection pool)
@@ -101,7 +101,7 @@ object Main extends App {
   val evilWorkTasks = 1 to n map { i =>
     {
       logger.info(s"Executing evil work query ${i}")
-      db.run(evilWorkQuery(i).transactionally)
+      db.run(evilWorkQuery(i))
     }
   }
   // Wait for those to run
