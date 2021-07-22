@@ -36,74 +36,29 @@ object Main extends App {
 
   val logger = Logger("example")
 
-  val db = Database.forConfig("databaseUrl")
-  try {
+  val db = Database.forConfig("database")
 
-    // The query interface for the Suppliers table
-    val suppliers: TableQuery[Suppliers] = TableQuery[Suppliers]
+  def setupDB() = {
+    logger.info("For this example we don't need any DB setup")
+  }
 
-    // the query interface for the Coffees table
-    val coffees: TableQuery[Coffees] = TableQuery[Coffees]
-
-    val setupAction: DBIO[Unit] = DBIO.seq(
-      // Create the schema by combining the DDLs for the Suppliers and Coffees
-      // tables using the query interfaces
-      (suppliers.schema ++ coffees.schema).create,
-      // Insert some suppliers
-      suppliers += (101, "Acme, Inc.", "99 Market Street", "Groundsville", "CA", "95199"),
-      suppliers += (49, "Superior Coffee", "1 Party Place", "Mendocino", "CA", "95460"),
-      suppliers += (150, "The High Ground", "100 Coffee Lane", "Meadows", "CA", "93966")
-    )
-
-    val setupFuture: Future[Unit] = db.run(setupAction)
-    val f = setupFuture.flatMap { _ =>
-      //#insertAction
-      // Insert some coffees (using JDBC's batch insert feature)
-      val insertAction: DBIO[Option[Int]] = coffees ++= Seq(
-        ("Colombian", 101, 7.99, 0, 0),
-        ("French_Roast", 49, 8.99, 0, 0),
-        ("Espresso", 150, 9.99, 0, 0),
-        ("Colombian_Decaf", 101, 8.99, 0, 0),
-        ("French_Roast_Decaf", 49, 9.99, 0, 0)
-      )
-
-      val insertAndPrintAction: DBIO[Unit] = insertAction.map {
-        coffeesInsertResult =>
-          // Print the number of rows inserted
-          coffeesInsertResult foreach { numRows =>
-            println(s"Inserted $numRows rows into the Coffees table")
-          }
-      }
-
-      val allSuppliersAction
-          : DBIO[Seq[(Int, String, String, String, String, String)]] =
-        suppliers.result
-
-      val combinedAction
-          : DBIO[Seq[(Int, String, String, String, String, String)]] =
-        insertAndPrintAction andThen allSuppliersAction
-
-      val combinedFuture
-          : Future[Seq[(Int, String, String, String, String, String)]] =
-        db.run(combinedAction)
-
-      combinedFuture.map { allSuppliers =>
-        allSuppliers.foreach(println)
-      }
-
-    }
-    Await.result(f, Duration.Inf)
-  } catch {
-    case e: org.postgresql.util.PSQLException => {
-      e.getMessage() match {
-        case s
-            if s.startsWith("ERROR: relation \"SUPPLIERS\" already exists") =>
-          logger.info(s"good exception: ${s}")
-        case other =>
-          logger.info(s"bad exception: ${other}"); throw new Exception(e)
+  def runConstantDBPings() = {
+    val pingQuery = sql"select 1".as[Option[String]].map { x => logger.info("Received ping") }
+    val pingFuture = Future {
+      while(true) {
+        logger.info("Sending ping")
+        db.run(pingQuery)
+        Thread.sleep(1000)
       }
     }
   }
+  
+  // Main begins here
+  setupDB()
+
+  // Spin up a task that runs a DB query every second and prints some log output
+  // This shows us whether slick is alive and working
+  runConstantDBPings()
 
   val query1: SQLActionBuilder = sql"select trunc(extract(epoch from now()))"
   val bar = query1.as[Int]
@@ -132,7 +87,7 @@ object Main extends App {
       .map { i => callbackFn(i); i }
 
   val doublet = DBIO.sequence(Vector(barFirst, delay, delay, barFirst))
-  val tasks = 1 to 19 map { i =>
+  val tasks = 1 to 2 map { i =>
     {
       db.run(doublet.transactionally)
     }
