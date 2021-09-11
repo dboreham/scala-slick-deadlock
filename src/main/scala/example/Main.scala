@@ -3,6 +3,7 @@ package example
 import scala.language.postfixOps
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Failure
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import com.typesafe.scalalogging.Logger
@@ -20,13 +21,19 @@ object Main extends App {
 
   def runConstantDBPings() = {
     val pingQuery =
-      sql"select 1".as[Option[String]].map { 
+      sql"select foo".as[Option[String]].map { 
         x => logger.info("Received ping") 
       }
     val pingFuture = Future {
       while (true) {
         logger.info("Sending ping")
-        db.run(pingQuery)
+        val runner = db.run(pingQuery)
+        Await.ready(runner, Duration.Inf)
+        val something = runner.value.get
+        something match {
+          case Failure(e) => println(s"Bad stuff happened: ${e}, ${e.printStackTrace()}")
+          case _ => println("Good stuff happened")
+        }
         Thread.sleep(1000)
       }
     }
