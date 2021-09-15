@@ -4,6 +4,7 @@ import scala.language.postfixOps
 import scala.util.{Try, Success, Failure}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Failure
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import com.typesafe.scalalogging.Logger
@@ -29,13 +30,12 @@ object Main extends App {
     val pingFuture = Future {
       while (true) {
         logger.info("Sending ping")
-        val requestFuture = db.run(pingQuery)
-        // Wait on the Future and report any exception thrown
-        Await.result(requestFuture, longTime)
-        val foo = requestFuture.value.get
-        foo match {
-          case Success(v) => logger.info("No exception")
-          case Failure(e) => logger.error("Exception:", e) 
+        val runner = db.run(pingQuery)
+        Await.ready(runner, Duration.Inf)
+        val something = runner.value.get
+        something match {
+          case Failure(e) => println(s"Bad stuff happened: ${e}, ${e.printStackTrace()}")
+          case _ => println("Good stuff happened")
         }
         Thread.sleep(1000)
       }
