@@ -1,6 +1,7 @@
 package example
 
 import scala.language.postfixOps
+import scala.util.{Try, Success, Failure}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -20,13 +21,22 @@ object Main extends App {
 
   def runConstantDBPings() = {
     val pingQuery =
-      sql"select 1".as[Option[String]].map { 
-        x => logger.info("Received ping") 
+      sql"select foo".as[Option[String]].map { 
+        x => {
+          logger.info("Received ping")
+        }
       }
     val pingFuture = Future {
       while (true) {
         logger.info("Sending ping")
-        db.run(pingQuery)
+        val requestFuture = db.run(pingQuery)
+        // Wait on the Future and report any exception thrown
+        Await.result(requestFuture, longTime)
+        val foo = requestFuture.value.get
+        foo match {
+          case Success(v) => logger.info("No exception")
+          case Failure(e) => logger.error("Exception:", e) 
+        }
         Thread.sleep(1000)
       }
     }
