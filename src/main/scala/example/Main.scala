@@ -20,7 +20,7 @@ object Main extends App {
     logger.info("For this example we don't need any DB setup")
   }
 
-  def runConstantDBPings() = {
+  def runConstantDBPings(): Future[Unit] = {
     val pingQuery =
       sql"select foo".as[Option[String]].map { 
         x => {
@@ -29,6 +29,7 @@ object Main extends App {
         }
       }
     val pingFuture = Future {
+      throw new RuntimeException("Boom!")
       while (true) {
         logger.info("Sending ping")
         val runner = db.run(pingQuery)
@@ -44,6 +45,7 @@ object Main extends App {
         Thread.sleep(1000)
       }
     }
+    pingFuture
   }
 
   val longTime = 300 seconds
@@ -53,7 +55,7 @@ object Main extends App {
 
   // Spin up a task that runs a DB query every second and prints some log output
   // This shows us whether slick is alive and working
-  runConstantDBPings()
+  val pingFuture = runConstantDBPings()
 
   if (false) {
     // Query that takes 1 second to execute and returns the current timestamp (as of the beginning of the transaction)
@@ -109,8 +111,17 @@ object Main extends App {
         db.run(evilWorkQuery(i).transactionally)
       }
     }
-    // Wait for those to run
-    Await.result(Future.sequence(evilWorkTasks), longTime)
+    // Wait for those to run, and also our ping task
+    val combinedFuture = Future.sequence(evilWorkTasks.appended(pingFuture))
+    Await.ready(combinedFuture, longTime)
+                val something = combinedFuture.value.get
+            something match {
+              case Failure(e) => { 
+                println(s"Exception reported from Await.ready: ${e}")
+                e.printStackTrace()
+              }
+              case _ => println("Good stuff happened")
+            }
     // When the starvation syndrome occurs, we never get to here
     logger.info("Nested queries completed")
   }
