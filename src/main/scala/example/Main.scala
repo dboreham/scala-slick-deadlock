@@ -25,6 +25,7 @@ object Main extends App {
       sql"select foo".as[Option[String]].map { 
         x => {
           logger.info("Received ping")
+          //throw new RuntimeException("Boom!")
         }
       }
     val pingFuture = Future {
@@ -34,7 +35,10 @@ object Main extends App {
         Await.ready(runner, Duration.Inf)
         val something = runner.value.get
         something match {
-          case Failure(e) => println(s"Bad stuff happened: ${e}, ${e.printStackTrace()}")
+          case Failure(e) => { 
+            println(s"Exception reported from Await.ready: ${e}")
+            e.printStackTrace()
+          }
           case _ => println("Good stuff happened")
         }
         Thread.sleep(1000)
