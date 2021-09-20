@@ -21,22 +21,23 @@ object Main extends App {
   }
 
   def runConstantDBPings(): Future[Unit] = {
+    val thing = sql"select 1".as[Option[String]]
     val pingQuery =
-      sql"select foo".as[Option[String]].map { 
-        x => {
+      sql"select 1".as[Option[String]].map { x =>
+        {
           logger.info("Received ping")
           //throw new RuntimeException("Boom!")
         }
       }
     val pingFuture = Future {
-      throw new RuntimeException("Boom!")
+      //throw new RuntimeException("Boom!")
       while (true) {
         logger.info("Sending ping")
         val runner = db.run(pingQuery)
         Await.ready(runner, Duration.Inf)
         val something = runner.value.get
         something match {
-          case Failure(e) => { 
+          case Failure(e) => {
             println(s"Exception reported from Await.ready: ${e}")
             e.printStackTrace()
           }
@@ -56,6 +57,16 @@ object Main extends App {
   // Spin up a task that runs a DB query every second and prints some log output
   // This shows us whether slick is alive and working
   val pingFuture = runConstantDBPings()
+
+  Await.ready(pingFuture, longTime)
+  val something = pingFuture.value.get
+  something match {
+    case Failure(e) => {
+      println(s"Exception reported from Await.ready: ${e}")
+      e.printStackTrace()
+    }
+    case _ => println("Good stuff happened")
+  }
 
   if (false) {
     // Query that takes 1 second to execute and returns the current timestamp (as of the beginning of the transaction)
@@ -114,14 +125,14 @@ object Main extends App {
     // Wait for those to run, and also our ping task
     val combinedFuture = Future.sequence(evilWorkTasks.appended(pingFuture))
     Await.ready(combinedFuture, longTime)
-                val something = combinedFuture.value.get
-            something match {
-              case Failure(e) => { 
-                println(s"Exception reported from Await.ready: ${e}")
-                e.printStackTrace()
-              }
-              case _ => println("Good stuff happened")
-            }
+    val something = combinedFuture.value.get
+    something match {
+      case Failure(e) => {
+        println(s"Exception reported from Await.ready: ${e}")
+        e.printStackTrace()
+      }
+      case _ => println("Good stuff happened")
+    }
     // When the starvation syndrome occurs, we never get to here
     logger.info("Nested queries completed")
   }
