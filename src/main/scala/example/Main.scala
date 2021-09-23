@@ -21,9 +21,36 @@ object Main extends App {
   }
 
   def runConstantDBPings(): Future[Unit] = {
-    val thing = sql"select 1".as[Option[String]]
     val pingQuery =
-      sql"select 1".as[Option[String]].map { x =>
+      sql"select foo".as[Option[String]].map { x =>
+        {
+          logger.info("Received ping")
+          //throw new RuntimeException("Boom!")
+        }
+      }
+    val pingFuture = Future {
+      //throw new RuntimeException("Boom!")
+      while (true) {
+        logger.info("Sending ping")
+        val runner = db.run(pingQuery)
+        Await.ready(runner, Duration.Inf)
+        val something = runner.value.get
+        something match {
+          case Failure(e) => {
+            println(s"Exception reported from Await.ready: ${e}")
+            e.printStackTrace()
+          }
+          case _ => println("Good stuff happened")
+        }
+        Thread.sleep(1000)
+      }
+    }
+    pingFuture
+  }
+
+  def runConstantOtherQuery(): Future[Unit] = {
+    val pingQuery =
+      sql"select trunc(extract(epoch from now())) from (select pg_sleep(1)) as nothing".as[Option[String]].map { x =>
         {
           logger.info("Received ping")
           //throw new RuntimeException("Boom!")
@@ -57,6 +84,7 @@ object Main extends App {
   // Spin up a task that runs a DB query every second and prints some log output
   // This shows us whether slick is alive and working
   val pingFuture = runConstantDBPings()
+  val pingFuture2 = runConstantOtherQuery()
 
   Await.ready(pingFuture, longTime)
   val something = pingFuture.value.get
