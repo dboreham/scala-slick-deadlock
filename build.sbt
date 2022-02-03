@@ -13,5 +13,5 @@ libraryDependencies ++= Seq(
 )
 
 fork := true
-//javaOptions += s"""-javaagent:${System.getProperty("user.home")}/.ivy2/local/com.github.rssh/trackedfuture_2.13/0.4.2-LOCAL/jars/trackedfuture_2.13-assembly.jar"""
+//javaOptions += s"""-javaagent:${System.getProperty("user.home")}/projects/carbon/opentelemetry-java-instrumentation/javaagent/build/libs/opentelemetry-javaagent-1.11.0-SNAPSHOT.jar"""
 
