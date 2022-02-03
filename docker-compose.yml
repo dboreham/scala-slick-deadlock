@@ -4,20 +4,13 @@ services:
 
   # A container for the Postgresql DB
   db:
-    build:
-      context: .
-      dockerfile: ./containers/postgresql.Dockerfile
+    image: postgres:14
     restart: unless-stopped
-    # TODO(dboreham): allow multiple instances with differnet data dirs
-    user: ${HOST_UID_GID:-1000:1000}
-    volumes:
-      - ./volumes/db/data:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: db
       POSTGRES_USER: db
       POSTGRES_DB: db
       POSTGRES_HOST_AUTH_METHOD: trust
-    # TODO(dboreham): use a random port to avoid colliding with other instances
     ports:
       # Postgresql
       - 54321:5432    
