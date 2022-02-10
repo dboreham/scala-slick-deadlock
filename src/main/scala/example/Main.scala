@@ -7,6 +7,8 @@ import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import com.typesafe.scalalogging.Logger
 import slick.jdbc.SQLActionBuilder
+import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.api.trace.Tracer
 
 object keepForLater {
 
@@ -38,6 +40,8 @@ object Main extends App {
 
   val db = Database.forConfig("database")
 
+  val tracer: Tracer = GlobalOpenTelemetry.getTracer("scala-slick-deadlock")
+
   def setupDB() = {
     logger.info("For this example we don't need any DB setup")
   }
@@ -47,8 +51,11 @@ object Main extends App {
       sql"select 1".as[Option[String]].map { x => logger.info("Received ping") }
     val pingFuture = Future {
       while (true) {
+        val span = tracer.spanBuilder("ping query").startSpan()
+        span.makeCurrent()
         logger.info("Sending ping")
         db.run(pingQuery)
+        span.end()
         Thread.sleep(1000)
       }
     }
@@ -58,6 +65,9 @@ object Main extends App {
 
   // Main begins here
   setupDB()
+
+  val parentSpan = tracer.spanBuilder("parent").startSpan()
+  parentSpan.makeCurrent()
 
   // Spin up a task that runs a DB query every second and prints some log output
   // This shows us whether slick is alive and working
@@ -113,5 +123,7 @@ object Main extends App {
   logger.info("Nested queries completed")
   // Sleep for a while longer to allow us to see if the concurrent pings are succeeding
   Thread.sleep(100000)
+
+  parentSpan.end()
 
 }

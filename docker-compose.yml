@@ -13,4 +13,8 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       # Postgresql
-      - 54321:5432    
+      - 54321:5432
+  zipkin:
+    image: openzipkin/zipkin
+    ports:
+      - 9411:9411
